@@ -480,38 +480,79 @@ function HistoryPage({setPage,navToSurcharges}){
 }
 
 // ═══ MODULE 6: SURCHARGES ═══
+function LaneFocusPanel({lane,onClear,onBack}){
+  if(!lane)return null;
+  const spct=lane.surchargePct||35;const fpct=lane.freightPct||65;
+  const negText=lane.beyondFP>0
+    ?"Avg dwell exceeds free period by "+lane.beyondFP+"d across "+lane.containers+" containers. Ask for "+Math.ceil(lane.beyondFP+1)+" additional free days on renewal — data supports it."
+    :"Dwell is within free period on this lane. If surcharge % is above 35%, negotiate a rate reduction rather than more free days.";
+  return <Card style={{marginBottom:18,borderLeft:"4px solid "+T.blue,background:T.blueBg}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+      <div style={{flex:1}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{fontSize:15,fontWeight:700,fontFamily:"monospace",color:T.text}}>{lane.lane}</span>
+          <Badge color={T.blue}>{lane.containers} containers</Badge>
+          {spct>35&&<SolidBadge color={T.red}>{"D&D "+spct+"% of cost — flag for negotiation"}</SolidBadge>}
+          {spct<=35&&<SolidBadge color={T.green}>{"D&D "+spct+"% — acceptable"}</SolidBadge>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:10}}>
+          {[{l:"O. Detention",v:lane.avgODet.toFixed(1)+"d",c:T.amber,fp:"5.1d free",over:lane.avgODet>5.1},
+            {l:"O. Demurrage",v:lane.avgODem.toFixed(1)+"d",c:T.purple,fp:"3.1d free",over:lane.avgODem>3.1},
+            {l:"D. Demurrage",v:lane.avgDDem.toFixed(1)+"d",c:T.purple,fp:"3.0d free",over:lane.avgDDem>3.0},
+            {l:"D. Detention",v:lane.avgDDet.toFixed(1)+"d",c:T.amber,fp:"6.0d free",over:lane.avgDDet>6.0},
+            {l:"$/Container",v:"$"+lane.costPerContainer,c:lane.costPerContainer>500?T.red:T.amber,fp:lane.beyondFP>0?lane.beyondFP+"d beyond FP":"Within free period",over:lane.beyondFP>0}
+          ].map(x=><div key={x.l} style={{background:"#fff",borderRadius:8,padding:"8px 10px",borderTop:"2px solid "+(x.over?T.red:x.c),position:"relative"}}>
+            {x.over&&<div style={{position:"absolute",top:4,right:6,fontSize:8,color:T.red,fontWeight:700}}>OVER</div>}
+            <div style={{fontSize:9,color:T.sub}}>{x.l}</div>
+            <div style={{fontSize:15,fontWeight:700,color:x.over?T.red:x.c}}>{x.v}</div>
+            <div style={{fontSize:9,color:T.dim}}>{x.fp}</div>
+          </div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div style={{background:"#fff",borderRadius:8,padding:"10px 12px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:6}}>Freight vs D&D Surcharge</div>
+            <div style={{display:"flex",height:12,borderRadius:6,overflow:"hidden",marginBottom:6}}>
+              <div style={{width:fpct+"%",background:T.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,color:"#fff",fontWeight:700}}>{fpct+"%"}</span></div>
+              <div style={{width:spct+"%",background:T.red,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,color:"#fff",fontWeight:700}}>{spct+"%"}</span></div>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:10}}>
+              <span style={{color:T.blue,fontWeight:600}}>Base Freight</span>
+              <span style={{color:T.red,fontWeight:600}}>D&D Surcharge</span>
+            </div>
+          </div>
+          <div style={{background:"#fff",borderRadius:8,padding:"10px 12px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:4}}>Negotiation Position</div>
+            <div style={{fontSize:11,color:T.text,lineHeight:1.5}}>{negText}</div>
+          </div>
+        </div>
+      </div>
+      <button onClick={onClear} style={{background:"none",border:"none",cursor:"pointer",marginLeft:12,padding:4}}><X size={16} color={T.dim}/></button>
+    </div>
+    {onBack&&<NavLink text="← Back to Lane Performance in Historical" onClick={onBack}/>}
+  </Card>;
+}
+
 function SurchargePage({setPage,selectedLane,clearLane}){
+  const lanes=useMemo(()=>BASE.topLanes.map(l=>{const td=l.avgODet+l.avgODem+l.avgDDem+l.avgDDet;const fp=BASE.costMatrix.dnd_origin.avgFP;const bp=Math.max(0,+(td-fp).toFixed(2));const cpc=Math.round(bp*72);return{...l,totalDwell:+td.toFixed(2),costPerContainer:cpc,beyondFP:bp};}).sort((a,b)=>b.costPerContainer-a.costPerContainer),[]);
+  const[activeLane,setActiveLane]=useState(()=>selectedLane||null);
   const cats=[{name:"Detention — Origin",side:"Origin",total:49169,containers:261,avgFP:5.1,color:T.amber},{name:"Detention — Dest",side:"Dest",total:1955,containers:8,avgFP:6.0,color:T.amber},{name:"Demurrage — Origin",side:"Origin",total:22353,containers:52,avgFP:3.1,color:T.purple},{name:"Demurrage — Dest",side:"Dest",total:5144,containers:12,avgFP:3.0,color:T.purple},{name:"Storage — Origin",side:"Origin",total:3075,containers:23,avgFP:3.1,color:T.green},{name:"Storage — Dest",side:"Dest",total:1295,containers:9,avgFP:3.0,color:T.green},{name:"Combined — Origin",side:"Origin",total:99565,containers:212,avgFP:9.9,color:T.red},{name:"Combined — Dest",side:"Dest",total:1814,containers:4,avgFP:12.0,color:T.red}];
   const detO=49169,demO=22353,dndO=99565,detD=1955,demD=5144,dndD=1814;
   return (<div style={{padding:"20px 28px",width:"100%",boxSizing:"border-box"}}>
-    <SH title="Surcharge Intelligence" sub="Evaluate rate structure effectiveness and build data-backed negotiation positions."/>
-    {selectedLane&&<Card style={{marginBottom:18,borderLeft:"4px solid "+T.blue,background:T.blueBg}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div style={{flex:1}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-            <span style={{fontSize:15,fontWeight:700,fontFamily:"monospace",color:T.text}}>{selectedLane.lane}</span>
-            <Badge color={T.blue}>{selectedLane.containers} containers</Badge>
-            {(selectedLane.surchargePct||35)>35&&<SolidBadge color={T.red}>{"D&D "+(selectedLane.surchargePct||35)+"% of cost"}</SolidBadge>}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:10}}>
-            {[{l:"O. Detention",v:selectedLane.avgODet.toFixed(1)+"d",c:T.amber,fp:"5.1d free"},{l:"O. Demurrage",v:selectedLane.avgODem.toFixed(1)+"d",c:T.purple,fp:"3.1d free"},{l:"D. Demurrage",v:selectedLane.avgDDem.toFixed(1)+"d",c:T.purple,fp:"3.0d free"},{l:"D. Detention",v:selectedLane.avgDDet.toFixed(1)+"d",c:T.amber,fp:"6.0d free"},{l:"$/Container",v:"$"+selectedLane.costPerContainer,c:selectedLane.costPerContainer>500?T.red:T.amber,fp:selectedLane.beyondFP+"d beyond FP"}].map(x=><div key={x.l} style={{background:"#fff",borderRadius:8,padding:"8px 10px",borderTop:"2px solid "+x.c}}><div style={{fontSize:9,color:T.sub}}>{x.l}</div><div style={{fontSize:15,fontWeight:700,color:x.c}}>{x.v}</div><div style={{fontSize:9,color:T.dim}}>{x.fp}</div></div>)}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <div style={{background:"#fff",borderRadius:8,padding:"8px 12px"}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:4}}>Freight vs Surcharge Split</div>
-              <div style={{display:"flex",height:10,borderRadius:5,overflow:"hidden",marginBottom:4}}><div style={{width:(selectedLane.freightPct||65)+"%",background:T.blue}}/><div style={{width:(selectedLane.surchargePct||35)+"%",background:T.red}}/></div>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:10}}><span style={{color:T.blue,fontWeight:600}}>{(selectedLane.freightPct||65)+"% Base Freight"}</span><span style={{color:T.red,fontWeight:600}}>{(selectedLane.surchargePct||35)+"% D&D Surcharge"}</span></div>
-            </div>
-            <div style={{background:"#fff",borderRadius:8,padding:"8px 12px"}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:4}}>Negotiation Position</div>
-              <div style={{fontSize:11,color:T.text,lineHeight:1.5}}>{selectedLane.beyondFP>0?"Average dwell exceeds free period by "+selectedLane.beyondFP+"d. Request "+Math.ceil(selectedLane.beyondFP+1)+" additional free days in next contract renewal.":"Dwell within free period. Focus on surcharge % reduction if above 35%."}</div>
-            </div>
-          </div>
-        </div>
-        <button onClick={clearLane} style={{background:"none",border:"none",cursor:"pointer",marginLeft:12,padding:4}}><X size={16} color={T.dim}/></button>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+      <div>
+        <div style={{color:T.text,fontSize:15,fontWeight:700}}>Surcharge Intelligence</div>
+        <div style={{color:T.sub,fontSize:11,marginTop:2}}>Pick a lane to build your negotiation position, or review portfolio-level rate structure below.</div>
       </div>
-      <NavLink text="← Back to Lane Performance" onClick={()=>{clearLane();setPage("history");}}/>
-    </Card>}
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,color:T.sub}}>Select lane:</span>
+        <select value={activeLane?activeLane.lane:""} onChange={e=>{const l=lanes.find(x=>x.lane===e.target.value)||null;setActiveLane(l);if(!l&&clearLane)clearLane();}}
+          style={{padding:"6px 10px",borderRadius:8,border:"1px solid "+T.border,fontSize:11,color:T.text,background:"#fff",cursor:"pointer"}}>
+          <option value="">All Lanes (Portfolio View)</option>
+          {lanes.map(l=><option key={l.lane} value={l.lane}>{l.lane} — {(l.surchargePct||35)>35?"⚠ D&D "+(l.surchargePct||35)+"%":"D&D "+(l.surchargePct||35)+"%"}</option>)}
+        </select>
+      </div>
+    </div>
+    <LaneFocusPanel lane={activeLane} onClear={()=>{setActiveLane(null);if(clearLane)clearLane();}} onBack={activeLane?()=>{setActiveLane(null);if(clearLane)clearLane();setPage("history");}:null}/>
     <ChartBox title="Surcharge Costs by Category" sub="Compare all 8 surcharge buckets to identify the largest" h={280}><ResponsiveContainer><BarChart data={cats} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"} vertical={false}/><XAxis type="number" stroke={T.dim} fontSize={10} tickFormatter={v=>fmt(v)}/><YAxis type="category" dataKey="name" stroke={T.dim} fontSize={9} width={160}/><Tooltip formatter={v=>fmt(v)}/><Bar dataKey="total" name="Total" radius={[0,4,4,0]}>{cats.map((c,i)=><Cell key={i} fill={c.color}/>)}</Bar></BarChart></ResponsiveContainer></ChartBox>
     <Card style={{marginTop:12}}>
       <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>Detailed Surcharge Table</div><div style={{fontSize:11,color:T.sub,marginBottom:8}}>Per-container cost by surcharge type. Higher $/container = higher priority for action.</div>
