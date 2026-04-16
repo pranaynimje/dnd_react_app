@@ -553,7 +553,105 @@ function SurchargePage({setPage,selectedLane,clearLane}){
       </div>
     </div>
     <LaneFocusPanel lane={activeLane} onClear={()=>{setActiveLane(null);if(clearLane)clearLane();}} onBack={activeLane?()=>{setActiveLane(null);if(clearLane)clearLane();setPage("history");}:null}/>
-    <ChartBox title="Surcharge Costs by Category" sub="Compare all 8 surcharge buckets to identify the largest" h={280}><ResponsiveContainer><BarChart data={cats} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"} vertical={false}/><XAxis type="number" stroke={T.dim} fontSize={10} tickFormatter={v=>fmt(v)}/><YAxis type="category" dataKey="name" stroke={T.dim} fontSize={9} width={160}/><Tooltip formatter={v=>fmt(v)}/><Bar dataKey="total" name="Total" radius={[0,4,4,0]}>{cats.map((c,i)=><Cell key={i} fill={c.color}/>)}</Bar></BarChart></ResponsiveContainer></ChartBox>
+
+    {activeLane?(()=>{
+      // Portfolio averages for benchmark
+      const portAvgODet=+(BASE.topLanes.reduce((s,l)=>s+l.avgODet*l.containers,0)/BASE.topLanes.reduce((s,l)=>s+l.containers,0)).toFixed(1);
+      const portAvgODem=+(BASE.topLanes.reduce((s,l)=>s+l.avgODem*l.containers,0)/BASE.topLanes.reduce((s,l)=>s+l.containers,0)).toFixed(1);
+      const portAvgDDem=+(BASE.topLanes.reduce((s,l)=>s+l.avgDDem*l.containers,0)/BASE.topLanes.reduce((s,l)=>s+l.containers,0)).toFixed(1);
+      const portAvgDDet=+(BASE.topLanes.reduce((s,l)=>s+l.avgDDet*l.containers,0)/BASE.topLanes.reduce((s,l)=>s+l.containers,0)).toFixed(1);
+      // Rate structure: if both O.Det > det FP AND O.Dem > dem FP → combined free period (9.9d) covers both → combined may be better
+      const oDetOver=activeLane.avgODet>5.1;const oDemOver=activeLane.avgODem>3.1;
+      const combinedTotal=activeLane.avgODet+activeLane.avgODem;
+      const combinedFP=9.9;
+      const combinedSaves=combinedTotal<combinedFP;
+      const rateRec=combinedSaves?"Combined D&D rate is better for this lane — combined free period ("+combinedFP+"d) covers the total dwell of "+combinedTotal.toFixed(1)+"d.":"Separate rates are better — combined free period ("+combinedFP+"d) does not cover total dwell ("+combinedTotal.toFixed(1)+"d). Pay for each independently to isolate exposure.";
+      // Free period asks specific to this lane
+      const fpAsks=[
+        {label:"Origin Detention",laneAvg:activeLane.avgODet,fp:5.1,color:T.amber},
+        {label:"Origin Demurrage",laneAvg:activeLane.avgODem,fp:3.1,color:T.purple},
+        {label:"Dest Demurrage",laneAvg:activeLane.avgDDem,fp:3.0,color:T.purple},
+        {label:"Dest Detention",laneAvg:activeLane.avgDDet,fp:6.0,color:T.amber},
+      ];
+      // Negotiation script
+      const overItems=fpAsks.filter(x=>x.laneAvg>x.fp);
+      const scriptLines=[
+        "On lane "+activeLane.lane+", our average dwell across "+activeLane.containers+" containers is "+activeLane.totalDwell.toFixed(1)+"d total.",
+        overItems.length>0?"We are consistently exceeding free period on: "+overItems.map(x=>x.label+" ("+x.laneAvg.toFixed(1)+"d vs "+x.fp+"d free)").join(", ")+".":"All dwell metrics are within free period on this lane — focus the conversation on reducing the surcharge percentage.",
+        activeLane.beyondFP>0?"We are asking for "+Math.ceil(activeLane.beyondFP+1)+" additional free days to match our operational reality.":"We request a reduction in the D&D surcharge rate for this lane from "+(activeLane.surchargePct||35)+"% to below 30% of total invoice.",
+        "Portfolio benchmark: our avg O. Detention is "+portAvgODet+"d and this lane is "+activeLane.avgODet.toFixed(1)+"d. "+(activeLane.avgODet>portAvgODet?"This lane is "+((activeLane.avgODet-portAvgODet).toFixed(1))+"d above portfolio average — a structural issue, not a one-off.":"This lane is performing within portfolio norms.")
+      ];
+      return <>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+          {/* Lane vs Portfolio Benchmark */}
+          <Card>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>Lane vs Portfolio Benchmark</div>
+            <div style={{fontSize:11,color:T.sub,marginBottom:10}}>How does this lane compare to your portfolio average? Red = lane is worse.</div>
+            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 4px",fontSize:11}}>
+              <thead><tr style={{color:T.dim,fontSize:9}}>{["Metric","This Lane","Portfolio Avg","Diff"].map(h=><th key={h} style={{padding:"3px 6px",fontWeight:600,textAlign:h==="Metric"?"left":"right"}}>{h}</th>)}</tr></thead>
+              <tbody>{[
+                {label:"O. Detention",lane:activeLane.avgODet,port:portAvgODet,c:T.amber},
+                {label:"O. Demurrage",lane:activeLane.avgODem,port:portAvgODem,c:T.purple},
+                {label:"D. Demurrage",lane:activeLane.avgDDem,port:portAvgDDem,c:T.purple},
+                {label:"D. Detention",lane:activeLane.avgDDet,port:portAvgDDet,c:T.amber},
+              ].map((r,i)=>{const diff=+(r.lane-r.port).toFixed(1);const worse=diff>0;return <tr key={i} style={{background:worse?T.redBg+"50":T.greenBg+"50"}}>
+                <td style={{padding:"5px 6px",borderRadius:"5px 0 0 5px",fontWeight:500,color:T.sub}}>{r.label}</td>
+                <td style={{padding:"5px 6px",textAlign:"right",fontWeight:700,color:r.c}}>{r.lane.toFixed(1)}d</td>
+                <td style={{padding:"5px 6px",textAlign:"right",color:T.dim}}>{r.port}d</td>
+                <td style={{padding:"5px 6px",textAlign:"right",borderRadius:"0 5px 5px 0",fontWeight:700,color:worse?T.red:T.green}}>{worse?"+":""}{diff}d</td>
+              </tr>;})}
+              </tbody>
+            </table>
+          </Card>
+          {/* Rate Structure Recommendation */}
+          <Card>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>Rate Structure for This Lane</div>
+            <div style={{fontSize:11,color:T.sub,marginBottom:10}}>Should this lane use Combined D&D or separate Detention + Demurrage rates?</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:10}}>
+              {[{t:"O. Detention",v:activeLane.avgODet.toFixed(1)+"d",fp:"5.1d",over:oDetOver,c:T.amber},{t:"O. Demurrage",v:activeLane.avgODem.toFixed(1)+"d",fp:"3.1d",over:oDemOver,c:T.purple},{t:"Combined FP",v:combinedFP+"d",fp:"vs "+combinedTotal.toFixed(1)+"d total",over:!combinedSaves,c:T.red}].map((x,i)=><div key={i} style={{background:T.card2,borderRadius:8,padding:"8px 10px",borderTop:"2px solid "+(x.over?T.red:T.green)}}>
+                <div style={{fontSize:9,color:T.sub}}>{x.t}</div>
+                <div style={{fontSize:14,fontWeight:700,color:x.over?T.red:T.green}}>{x.v}</div>
+                <div style={{fontSize:9,color:T.dim}}>{x.fp}</div>
+              </div>)}
+            </div>
+            <div style={{padding:"8px 12px",background:combinedSaves?T.greenBg:T.redBg,borderRadius:8,borderLeft:"3px solid "+(combinedSaves?T.green:T.red)}}>
+              <div style={{fontSize:11,fontWeight:600,color:combinedSaves?T.green:T.red,marginBottom:3}}>{combinedSaves?"✓ Recommend: Combined D&D":"✗ Recommend: Separate Rates"}</div>
+              <div style={{fontSize:11,color:T.text,lineHeight:1.5}}>{rateRec}</div>
+            </div>
+          </Card>
+        </div>
+        {/* Free Period Ask */}
+        <Card style={{marginBottom:14}}>
+          <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>Free Period Ask — {activeLane.lane}</div>
+          <div style={{fontSize:11,color:T.sub,marginBottom:10}}>Lane-specific free period utilization. Bars in red = already in paid tier on this lane. Use these numbers in your negotiation.</div>
+          {fpAsks.map((r,i)=>{const pct=Math.round((r.laneAvg/r.fp)*100);const capped=Math.min(100,pct);const over=pct>100;const portAvgs=[portAvgODet,portAvgODem,portAvgDDem,portAvgDDet][i];const portPct=Math.round((portAvgs/r.fp)*100);return <div key={i} style={{marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+            <span style={{fontSize:11,color:T.sub,fontWeight:500}}>{r.label}</span>
+            <div style={{display:"flex",gap:12,alignItems:"center"}}>
+              <span style={{fontSize:10,color:T.dim}}>{"Portfolio: "+portAvgs+"d ("+portPct+"%)"}</span>
+              <span style={{fontSize:12,fontWeight:700,color:over?T.red:pct>90?T.red:pct>70?T.amber:T.green}}>{r.laneAvg.toFixed(1)+"d / "+r.fp+"d ("+pct+"%)"}{ over&&<span style={{marginLeft:4,fontSize:10}}>⚠ OVER — ask for {Math.ceil(r.laneAvg-r.fp+1)}d more</span>}</span>
+            </div>
+          </div>
+          <div style={{height:8,background:T.card2,borderRadius:4,overflow:"hidden",position:"relative"}}>
+            <div style={{height:"100%",width:Math.min(100,portPct)+"%",background:T.border,borderRadius:4,position:"absolute"}}/>
+            <div style={{height:"100%",width:capped+"%",background:over?T.red:pct>90?T.red:pct>70?T.amber:r.color,borderRadius:4,position:"absolute"}}/>
+          </div>
+          <div style={{fontSize:9,color:T.dim,marginTop:2}}>{"Grey = portfolio avg "+portAvgs+"d"}</div>
+          </div>;})}
+        </Card>
+        {/* Negotiation Script */}
+        <Card style={{borderLeft:"3px solid "+T.blue,background:T.blueBg}}>
+          <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Negotiation Script — {activeLane.lane}</div>
+          <div style={{fontSize:11,color:T.sub,marginBottom:10}}>Use this in your carrier QBR or contract renewal conversation. Based on actual data from this lane.</div>
+          {scriptLines.map((line,i)=><div key={i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:i<scriptLines.length-1?"1px solid "+T.border+"60":"none"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",background:T.blue,color:"#fff",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
+            <div style={{fontSize:12,color:T.text,lineHeight:1.6}}>{line}</div>
+          </div>)}
+          <NavLink text="See carrier performance → Carrier Intel" onClick={()=>setPage("carriers")}/>
+        </Card>
+      </>;
+    })():(
+    <>
+    <ChartBox title="Portfolio — Surcharge Costs by Category" sub="Compare all 8 surcharge buckets across the portfolio. Select a lane above to drill into negotiation specifics." h={280}><ResponsiveContainer><BarChart data={cats} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"} vertical={false}/><XAxis type="number" stroke={T.dim} fontSize={10} tickFormatter={v=>fmt(v)}/><YAxis type="category" dataKey="name" stroke={T.dim} fontSize={9} width={160}/><Tooltip formatter={v=>fmt(v)}/><Bar dataKey="total" name="Total" radius={[0,4,4,0]}>{cats.map((c,i)=><Cell key={i} fill={c.color}/>)}</Bar></BarChart></ResponsiveContainer></ChartBox>
     <Card style={{marginTop:12}}>
       <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>Detailed Surcharge Table</div><div style={{fontSize:11,color:T.sub,marginBottom:8}}>Per-container cost by surcharge type. Higher $/container = higher priority for action.</div>
       <table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 4px",fontSize:11}}><thead><tr style={{color:T.dim,fontSize:10,textAlign:"left"}}>{["Category","Side","Total","Containers","FP","$/Container","Reason"].map(h=><th key={h} style={{padding:"5px 8px",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",textAlign:["Total","$/Container"].includes(h)?"right":"left"}}>{h}</th>)}</tr></thead>
@@ -567,11 +665,12 @@ function SurchargePage({setPage,selectedLane,clearLane}){
       </Card>;})}
     </div>
     <Card style={{marginTop:14}}>
-      <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>Free Period Utilization</div><div style={{fontSize:11,color:T.sub,marginBottom:10}}>How much of your free period is consumed? {">"}90% = zero buffer, negotiate more days.</div>
+      <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>Free Period Utilization — Portfolio</div><div style={{fontSize:11,color:T.sub,marginBottom:10}}>How much of your free period is consumed across all lanes? {">"}90% = zero buffer, negotiate more days.</div>
       {[{label:"Origin Detention",avg:4.8,fp:5.1,color:T.amber},{label:"Origin Demurrage",avg:0.87,fp:3.1,color:T.purple},{label:"Dest Demurrage",avg:2.6,fp:3.0,color:T.green},{label:"Dest Detention",avg:5.51,fp:6.0,color:T.red}].map((r,i)=>{const pct=Math.round((r.avg/r.fp)*100);const capped=Math.min(100,pct);const over=pct>100;return <div key={i} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:11,color:T.sub}}>{r.label}</span><span style={{fontSize:12,fontWeight:700,color:over?T.red:pct>90?T.red:pct>70?T.amber:T.green}}>{r.avg+"d / "+r.fp+"d ("+pct+"%)"}{over&&" ⚠ OVER"}</span></div><div style={{height:7,background:T.card2,borderRadius:4,overflow:"hidden",border:"none",boxShadow:"inset 0 1px 2px rgba(0,0,0,.06)",position:"relative"}}><div style={{height:"100%",width:capped+"%",background:over?T.red:pct>90?T.red:pct>70?T.amber:T.green,borderRadius:4}}/></div></div>;})}
       <Insight text={(()=>{const detAvg=BASE.stageDays.origin_detention.avg;const detFP=BASE.costMatrix.detention_origin.avgFP;const util=Math.round(detAvg/detFP*100);const newFP=detFP+1;const newUtil=Math.round(detAvg/newFP*100);return "Origin Detention at "+util+"% utilization ("+detAvg+"d avg vs "+detFP+"d free). Negotiating 1 extra free day ("+detFP+"d → "+newFP+"d) reduces utilization to ~"+newUtil+"%. Use this data in your next carrier contract discussion.";})()}/>
       <NavLink text="Back to today's priorities → Command Center" onClick={()=>setPage("home")}/>
     </Card>
+    </>)}
   </div>);
 }
 
