@@ -274,7 +274,7 @@ function CarrierPage({setPage}){
     if(view==="dwell") return carriers.map(c=>({name:c.name,"O.Det":c.avgODet,"O.Dem":c.avgODem,"O.Comb":+(c.avgODet+c.avgODem).toFixed(1),"D.Det":c.avgDDet,"D.Dem":c.avgDDem,"D.Comb":+(c.avgDDem+c.avgDDet).toFixed(1)}));
     if(view==="exceeding") return carriers.map(c=>({name:c.name,"Past FP":c.pastFPCount,"Within FP":c.containers-c.pastFPCount}));
     if(view==="cost") return carriers.map(c=>({name:c.name,"Est. Cost":c.estCost}));
-    if(view==="tier") return carriers.map(c=>({name:c.name,"Within FP":c.tierIn,"FP+1–3d":c.tier1,"FP+4–7d":c.tier2,"FP+7d+":c.tier3}));
+    if(view==="tier") return carriers.map(c=>({name:c.name,"Free (No Charge)":c.tierIn,"1–3 Days Overdue":c.tier1,"4–7 Days Overdue":c.tier2,"7+ Days Overdue":c.tier3}));
   },[view,carriers]);
 
   const viewMeta={
@@ -311,12 +311,42 @@ function CarrierPage({setPage}){
       {view==="cost"&&(
         <div style={{height:250}}><ResponsiveContainer><BarChart data={[...chartData].sort((a,b)=>b["Est. Cost"]-a["Est. Cost"])} barSize={22} barCategoryGap="35%"><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"}/><XAxis dataKey="name" stroke={T.dim} fontSize={10}/><YAxis stroke={T.dim} fontSize={10} tickFormatter={v=>"$"+Math.round(v/1000)+"k"}/><Tooltip content={({active,payload,label})=>{if(!active||!payload?.length)return null;return <div style={{background:"#fff",borderRadius:10,padding:"10px 14px",boxShadow:"0 4px 16px rgba(0,0,0,.08)"}}><div style={{fontSize:11,fontWeight:700,marginBottom:4}}>{label}</div><div style={{fontSize:9,color:T.red}}>{"Est. Exposure: "+fmt(payload[0].value)}</div></div>;}}/><Bar dataKey="Est. Cost" fill={T.red} radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
       )}
-      {view==="tier"&&(<>
-        <div style={{display:"flex",gap:12,marginBottom:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
-          {[{l:"Within FP",c:T.green},{l:"FP+1–3d",c:T.amber},{l:"FP+4–7d",c:"#F97316"},{l:"FP+7d+",c:T.red}].map(x=><div key={x.l} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:10,height:10,borderRadius:2,background:x.c}}/><span style={{fontSize:9,color:T.sub}}>{x.l}</span></div>)}
-        </div>
-        <div style={{height:250}}><ResponsiveContainer><BarChart data={chartData} barSize={20} barCategoryGap="35%"><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"}/><XAxis dataKey="name" stroke={T.dim} fontSize={10}/><YAxis stroke={T.dim} fontSize={10}/><Tooltip content={<CTip/>}/><Bar dataKey="Within FP" stackId="t" fill={T.green}/><Bar dataKey="FP+1–3d" stackId="t" fill={T.amber}/><Bar dataKey="FP+4–7d" stackId="t" fill="#F97316"/><Bar dataKey="FP+7d+" stackId="t" fill={T.red} radius={[3,3,0,0]}/></BarChart></ResponsiveContainer></div>
-      </>)}
+      {view==="tier"&&(()=>{
+        const TIERS=[
+          {key:"Free (No Charge)",  color:T.green,   rate:"$0/day",    sub:"Within free period"},
+          {key:"1–3 Days Overdue",  color:T.amber,   rate:"~$50/day",  sub:"Low tier — act soon"},
+          {key:"4–7 Days Overdue",  color:"#F97316", rate:"~$100/day", sub:"Mid tier — costs rising"},
+          {key:"7+ Days Overdue",   color:T.red,     rate:"~$200/day", sub:"Highest tier — urgent"},
+        ];
+        const TierTip=({active,payload,label})=>{
+          if(!active||!payload?.length)return null;
+          const carr=carriers.find(c=>c.name===label);
+          if(!carr)return null;
+          return <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",boxShadow:"0 4px 16px rgba(0,0,0,.1)",minWidth:200}}>
+            <div style={{fontSize:11,fontWeight:700,marginBottom:8,borderBottom:"1px solid #f0f0f0",paddingBottom:4}}>{label} — {carr.containers} containers total</div>
+            {TIERS.map(t=>{
+              const count=payload.find(p=>p.dataKey===t.key)?.value??0;
+              const pct=carr.containers>0?Math.round(count/carr.containers*100):0;
+              return <div key={t.key} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <div style={{width:8,height:8,borderRadius:2,background:t.color,flexShrink:0}}/>
+                <span style={{fontSize:9,color:T.sub,flex:1}}>{t.key}</span>
+                <span style={{fontSize:10,fontWeight:700,color:t.color,minWidth:20,textAlign:"right"}}>{count}</span>
+                <span style={{fontSize:9,color:T.dim,minWidth:28,textAlign:"right"}}>{pct}%</span>
+                <span style={{fontSize:9,color:T.sub,minWidth:60,textAlign:"right"}}>{t.rate}</span>
+              </div>;
+            })}
+          </div>;
+        };
+        return <>
+          <div style={{display:"flex",gap:16,marginBottom:10,flexWrap:"wrap",alignItems:"flex-start"}}>
+            {TIERS.map(t=><div key={t.key} style={{display:"flex",alignItems:"flex-start",gap:6}}>
+              <div style={{width:10,height:10,borderRadius:2,background:t.color,marginTop:1,flexShrink:0}}/>
+              <div><div style={{fontSize:9,fontWeight:700,color:T.text}}>{t.key}</div><div style={{fontSize:8,color:T.sub}}>{t.rate}</div></div>
+            </div>)}
+          </div>
+          <div style={{height:240}}><ResponsiveContainer><BarChart data={chartData} barSize={20} barCategoryGap="35%"><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"}/><XAxis dataKey="name" stroke={T.dim} fontSize={10}/><YAxis stroke={T.dim} fontSize={10} label={{value:"Containers",angle:-90,position:"insideLeft",fontSize:9,fill:T.dim}}/><Tooltip content={<TierTip/>}/><Bar dataKey="Free (No Charge)" stackId="t" fill={T.green}/><Bar dataKey="1–3 Days Overdue" stackId="t" fill={T.amber}/><Bar dataKey="4–7 Days Overdue" stackId="t" fill="#F97316"/><Bar dataKey="7+ Days Overdue" stackId="t" fill={T.red} radius={[3,3,0,0]}/></BarChart></ResponsiveContainer></div>
+        </>;
+      })()}
     </ChartBox>
 
     <Card style={{marginTop:12}}>
@@ -340,7 +370,7 @@ function CarrierPage({setPage}){
           </tbody>
         </>)}
         {view==="tier"&&(<>
-          <thead><tr style={{color:T.dim,fontSize:10,textAlign:"left"}}>{["Carrier","Vol","Within FP","FP+1–3d","FP+4–7d","FP+7d+","% In Paid","Score"].map(h=><th key={h} style={{padding:"5px 7px",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",textAlign:["Vol","Within FP","FP+1–3d","FP+4–7d","FP+7d+","% In Paid","Score"].includes(h)?"right":"left"}}>{h}</th>)}</tr></thead>
+          <thead><tr style={{color:T.dim,fontSize:10,textAlign:"left"}}>{["Carrier","Vol","Free","1–3d Over","4–7d Over","7d+ Over","% Overdue","Score"].map(h=><th key={h} style={{padding:"5px 7px",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",textAlign:["Vol","Free","1–3d Over","4–7d Over","7d+ Over","% Overdue","Score"].includes(h)?"right":"left"}}>{h}</th>)}</tr></thead>
           <tbody>{[...carriers].sort((a,b)=>(b.tier1+b.tier2+b.tier3)-(a.tier1+a.tier2+a.tier3)).map(c=>{const sel=selCarrier===c.name;const paidPct=+(c.pastFPPct).toFixed(1);const rc=paidPct>50?T.red:paidPct>25?T.amber:T.green;return <tr key={c.name} onClick={()=>setSelCarrier(sel?null:c.name)} style={{background:sel?T.blueBg:T.card2,cursor:"pointer"}}><td style={{padding:"7px",borderRadius:"6px 0 0 6px",fontWeight:600}}>{c.name}{sel&&<ChevronDown size={10} color={T.blue}/>}</td><td style={{padding:"7px",textAlign:"right",color:T.sub}}>{c.containers}</td><td style={{padding:"7px",textAlign:"right",color:T.green,fontWeight:600}}>{c.tierIn}</td><td style={{padding:"7px",textAlign:"right",color:T.amber,fontWeight:600}}>{c.tier1}</td><td style={{padding:"7px",textAlign:"right",color:"#F97316",fontWeight:600}}>{c.tier2}</td><td style={{padding:"7px",textAlign:"right",color:T.red,fontWeight:600}}>{c.tier3}</td><td style={{padding:"7px",textAlign:"right",color:rc,fontWeight:700}}>{paidPct}%</td><td style={{padding:"7px",borderRadius:"0 6px 6px 0",textAlign:"right"}}><SolidBadge color={rc}>{paidPct>50?"Deep":"Moderate"}</SolidBadge></td></tr>;})}
           </tbody>
         </>)}
