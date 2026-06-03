@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, Legend, Area, AreaChart, ReferenceLine, ScatterChart, Scatter, ZAxis } from "recharts";
-import { AlertTriangle, TrendingUp, TrendingDown, Anchor, Ship, Clock, DollarSign, Package, Target, Zap, Layers, Calendar, Activity, MapPin, Truck, Box, AlertCircle, X, ChevronDown, HelpCircle, ArrowRight, Download, MessageSquare, Send, Trash2 } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, Anchor, Ship, Clock, DollarSign, Package, Target, Zap, Layers, Calendar, Activity, MapPin, Truck, Box, AlertCircle, X, ChevronDown, HelpCircle, ArrowRight, Download } from "lucide-react";
 
 // ═══ DATA ═══
 const BASE={
@@ -68,7 +68,7 @@ const CTip=({active,payload,label})=>{if(!active||!payload)return null;return <d
 
 // ═══ NAV (with notification dots) ═══
 const NAV=[{id:"home",label:"Command Center",icon:Activity,dot:true},{id:"costs",label:"Cost Overview",icon:DollarSign},{id:"carriers",label:"Carrier Intel",icon:Ship},{id:"optimizer",label:"Cost Optimizer",icon:Target,dot:true},{id:"history",label:"Historical",icon:Calendar},{id:"surcharges",label:"Surcharges",icon:Layers}];
-function TopNav({page,setPage,commentsOpen,setCommentsOpen,commentCount}){return <div style={{background:"#fff",borderBottom:"1px solid "+T.border,padding:"12px 28px",display:"flex",alignItems:"center",boxShadow:"0 1px 4px rgba(0,0,0,.04)"}}><div style={{display:"flex",alignItems:"center",gap:16,width:"100%"}}><div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#1A1D26,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Anchor size={18} color="#fff"/></div><div style={{flexShrink:0}}><div style={{fontWeight:700,fontSize:18,color:T.text,letterSpacing:"-0.3px"}}>D&D Intelligence Hub</div><div style={{fontSize:10,color:T.dim,fontWeight:400}}>Last updated: 3 min ago</div></div><div style={{width:1,height:28,background:T.border,margin:"0 10px",flexShrink:0}}/><div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{NAV.map(n=>{const I=n.icon;const a=page===n.id;return <button key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:8,border:"none",background:a?"#1A1D26":"transparent",color:a?"#fff":T.sub,fontSize:11,fontWeight:a?600:500,cursor:"pointer",whiteSpace:"nowrap",position:"relative",transition:"all .15s ease"}}><I size={13}/>{n.label}{n.dot&&!a&&<div style={{position:"absolute",top:4,right:4,width:6,height:6,borderRadius:"50%",background:T.red,boxShadow:"0 0 0 2px #fff"}}/>}</button>;})}</div><div style={{marginLeft:"auto",flexShrink:0}}><button onClick={()=>setCommentsOpen(o=>!o)} title="Toggle comments" style={{display:"flex",alignItems:"center",gap:6,padding:"7px 13px",borderRadius:8,border:"1px solid "+(commentsOpen?T.blue:T.border),background:commentsOpen?T.blueBg:"transparent",color:commentsOpen?T.blue:T.sub,fontSize:11,fontWeight:600,cursor:"pointer",position:"relative",transition:"all .15s ease"}}><MessageSquare size={13}/>Comments{commentCount>0&&<span style={{background:T.blue,color:"#fff",borderRadius:20,fontSize:9,fontWeight:700,padding:"1px 6px",marginLeft:2}}>{commentCount}</span>}</button></div></div></div>;}
+function TopNav({page,setPage}){return <div style={{background:"#fff",borderBottom:"1px solid "+T.border,padding:"12px 28px",display:"flex",alignItems:"center",boxShadow:"0 1px 4px rgba(0,0,0,.04)"}}><div style={{display:"flex",alignItems:"center",gap:16,width:"100%"}}><div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#1A1D26,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Anchor size={18} color="#fff"/></div><div style={{flexShrink:0}}><div style={{fontWeight:700,fontSize:18,color:T.text,letterSpacing:"-0.3px"}}>D&D Intelligence Hub</div><div style={{fontSize:10,color:T.dim,fontWeight:400}}>Last updated: 3 min ago</div></div><div style={{width:1,height:28,background:T.border,margin:"0 10px",flexShrink:0}}/><div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{NAV.map(n=>{const I=n.icon;const a=page===n.id;return <button key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:8,border:"none",background:a?"#1A1D26":"transparent",color:a?"#fff":T.sub,fontSize:11,fontWeight:a?600:500,cursor:"pointer",whiteSpace:"nowrap",position:"relative",transition:"all .15s ease"}}><I size={13}/>{n.label}{n.dot&&!a&&<div style={{position:"absolute",top:4,right:4,width:6,height:6,borderRadius:"50%",background:T.red,boxShadow:"0 0 0 2px #fff"}}/>}</button>;})}</div></div></div>;}
 
 // ═══ MODULE 1: COMMAND CENTER ═══
 function HomePage({setPage}){
@@ -1113,83 +1113,21 @@ function SurchargePage({setPage,selectedLane,clearLane}){
   </div>);
 }
 
-// ═══ COMMENTS PANEL ═══
-const PAGE_LABELS={home:"Command Center",costs:"Cost Overview",carriers:"Carrier Intel",optimizer:"Cost Optimizer",history:"Historical",surcharges:"Surcharges"};
-function CommentsPanel({page,comments,setComments,onClose}){
-  const[text,setText]=useState("");
-  const[author,setAuthor]=useState("");
-  const pageComments=comments.filter(c=>c.page===page);
-  const addComment=()=>{
-    if(!text.trim())return;
-    setComments(prev=>[...prev,{id:Date.now(),page,author:author.trim()||"Anonymous",text:text.trim(),time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),date:new Date().toLocaleDateString([],{month:"short",day:"numeric"})}]);
-    setText("");
-  };
-  const del=id=>setComments(prev=>prev.filter(c=>c.id!==id));
-  return(
-    <div style={{width:272,minWidth:272,borderLeft:"1px solid "+T.border,background:"#fff",display:"flex",flexDirection:"column",height:"calc(100vh - 57px)",position:"sticky",top:57,overflowY:"hidden"}}>
-      {/* header */}
-      <div style={{padding:"12px 14px",borderBottom:"1px solid "+T.border,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <div>
-          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Comments</div>
-          <div style={{fontSize:10,color:T.sub}}>{PAGE_LABELS[page]||page}</div>
-        </div>
-        <button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",color:T.dim,padding:2,display:"flex"}}><X size={14}/></button>
-      </div>
-      {/* list */}
-      <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
-        {pageComments.length===0
-          ?<div style={{textAlign:"center",color:T.dim,fontSize:11,marginTop:48,lineHeight:1.8}}>No comments yet on this tab.<br/>Add one below.</div>
-          :pageComments.map(c=>(
-            <div key={c.id} style={{marginBottom:10,padding:"10px 12px",background:T.card2,borderRadius:10,position:"relative"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <span style={{fontSize:11,fontWeight:700,color:T.text}}>{c.author}</span>
-                <span style={{fontSize:9,color:T.dim}}>{c.date} {c.time}</span>
-              </div>
-              <div style={{fontSize:12,color:T.text,lineHeight:1.5,paddingRight:16}}>{c.text}</div>
-              <button onClick={()=>del(c.id)} title="Delete" style={{position:"absolute",top:8,right:8,border:"none",background:"none",cursor:"pointer",color:T.dim,padding:2,display:"flex",opacity:.6}}><Trash2 size={10}/></button>
-            </div>
-          ))
-        }
-      </div>
-      {/* input */}
-      <div style={{borderTop:"1px solid "+T.border,padding:"12px 14px",flexShrink:0}}>
-        <input placeholder="Your name (optional)" value={author} onChange={e=>setAuthor(e.target.value)}
-          style={{width:"100%",border:"1px solid "+T.border,borderRadius:7,padding:"6px 10px",fontSize:11,marginBottom:7,boxSizing:"border-box",outline:"none",color:T.text,fontFamily:"inherit"}}/>
-        <textarea placeholder="Add a comment…" value={text} onChange={e=>setText(e.target.value)}
-          onKeyDown={e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey))addComment();}}
-          rows={3} style={{width:"100%",border:"1px solid "+T.border,borderRadius:7,padding:"6px 10px",fontSize:11,resize:"none",boxSizing:"border-box",outline:"none",fontFamily:"inherit",color:T.text}}/>
-        <button onClick={addComment} disabled={!text.trim()}
-          style={{width:"100%",marginTop:7,padding:"7px 0",borderRadius:7,border:"none",background:text.trim()?T.blue:T.border,color:"#fff",fontSize:11,fontWeight:600,cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          <Send size={11}/>Post Comment
-        </button>
-        <div style={{fontSize:9,color:T.dim,marginTop:5,textAlign:"center"}}>Ctrl+Enter to post</div>
-      </div>
-    </div>
-  );
-}
-
 // ═══ MAIN APP ═══
 export default function App(){
   const[page,setPage]=useState("home");
   const[selectedLane,setSelectedLane]=useState(null);
-  const[commentsOpen,setCommentsOpen]=useState(false);
-  const[comments,setComments]=useState(()=>{try{return JSON.parse(localStorage.getItem("dnd_comments")||"[]");}catch{return[];}});
-  useEffect(()=>{localStorage.setItem("dnd_comments",JSON.stringify(comments));},[comments]);
   const navToSurcharges=(lane)=>{setSelectedLane(lane);setPage("surcharges");};
-  const pageCommentCount=comments.filter(c=>c.page===page).length;
   return (<div style={{background:T.bg,minHeight:"100vh",fontFamily:"'Roboto','Arial',sans-serif",color:T.text}}>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;800&display=swap" rel="stylesheet"/>
-    <TopNav page={page} setPage={setPage} commentsOpen={commentsOpen} setCommentsOpen={setCommentsOpen} commentCount={pageCommentCount}/>
-    <div style={{display:"flex",alignItems:"flex-start",background:T.bg,minHeight:"calc(100vh - 57px)"}}>
-      <div style={{flex:1,minWidth:0,boxSizing:"border-box"}}>
-        {page==="home"&&<HomePage setPage={setPage}/>}
-        {page==="costs"&&<CostPage setPage={setPage}/>}
-        {page==="carriers"&&<CarrierPage setPage={setPage}/>}
-        {page==="optimizer"&&<OptimizerPage/>}
-        {page==="history"&&<HistoryPage setPage={setPage} navToSurcharges={navToSurcharges}/>}
-        {page==="surcharges"&&<SurchargePage setPage={setPage} selectedLane={selectedLane} clearLane={()=>setSelectedLane(null)}/>}
-      </div>
-      {commentsOpen&&<CommentsPanel page={page} comments={comments} setComments={setComments} onClose={()=>setCommentsOpen(false)}/>}
+    <TopNav page={page} setPage={setPage}/>
+    <div style={{background:T.bg,minHeight:"calc(100vh - 57px)",width:"100%",boxSizing:"border-box"}}>
+      {page==="home"&&<HomePage setPage={setPage}/>}
+      {page==="costs"&&<CostPage setPage={setPage}/>}
+      {page==="carriers"&&<CarrierPage setPage={setPage}/>}
+      {page==="optimizer"&&<OptimizerPage/>}
+      {page==="history"&&<HistoryPage setPage={setPage} navToSurcharges={navToSurcharges}/>}
+      {page==="surcharges"&&<SurchargePage setPage={setPage} selectedLane={selectedLane} clearLane={()=>setSelectedLane(null)}/>}
     </div>
   </div>);
 }
