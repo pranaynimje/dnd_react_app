@@ -1173,7 +1173,8 @@ export default function App(){
   const[page,setPage]=useState("home");
   const[selectedLane,setSelectedLane]=useState(null);
   const[commentsOpen,setCommentsOpen]=useState(false);
-  const[comments,setComments]=useState([]);
+  const[comments,setComments]=useState(()=>{try{return JSON.parse(localStorage.getItem("dnd_comments")||"[]");}catch{return[];}});
+  useEffect(()=>{localStorage.setItem("dnd_comments",JSON.stringify(comments));},[comments]);
   const navToSurcharges=(lane)=>{setSelectedLane(lane);setPage("surcharges");};
   const pageCommentCount=comments.filter(c=>c.page===page).length;
   return (<div style={{background:T.bg,minHeight:"100vh",fontFamily:"'Roboto','Arial',sans-serif",color:T.text}}>
