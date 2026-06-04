@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, Legend, Area, AreaChart, ReferenceLine, ScatterChart, Scatter, ZAxis } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, Legend, Area, AreaChart, ReferenceLine, ScatterChart, Scatter, ZAxis, ComposedChart, Line } from "recharts";
 import { AlertTriangle, TrendingUp, TrendingDown, Anchor, Ship, Clock, DollarSign, Package, Target, Zap, Layers, Calendar, Activity, MapPin, Truck, Box, AlertCircle, X, ChevronDown, HelpCircle, ArrowRight, Download } from "lucide-react";
 
 // ═══ DATA ═══
@@ -712,6 +712,62 @@ function OptimizerPage(){
   const selStyle={border:"1px solid "+T.border+"80",borderRadius:8,padding:"4px 8px",fontSize:10,color:T.text,background:"#fff",cursor:"pointer",outline:"none",minWidth:70};
   const resetAll=()=>{setAFpStatus("All");setACat("All");setARisk("All");setACostBand("All");setAPolF("All");setAPodF("All");setACarF("All");setATopN("All");setBFpStatus("All");setBCat("All");setBRisk("All");setBCostBand("All");setBPolF("All");setBPodF("All");setBCarF("All");setBTopN("All");};
 
+  // Planner view toggle
+  const[plannerView,setPlannerView]=useState("planner"); // "planner" | "forecast"
+
+  // General filters for forecast view
+  const[fFpStatus,setFFpStatus]=useState("All");
+  const[fCat,setFCat]=useState("All");
+  const[fRisk,setFRisk]=useState("All");
+  const[fCarF,setFCarF]=useState("All");
+  const[fPolF,setFPolF]=useState("All");
+  const[fPodF,setFPodF]=useState("All");
+  const[fSortCol,setFSortCol]=useState("todayCost");
+  const[fSortDir,setFSortDir]=useState("desc");
+
+  // Filtered containers for forecast view
+  const forecastContainers=useMemo(()=>{
+    return allContainers.filter(c=>{
+      if(fFpStatus!=="All"&&c.fpStatus!==fFpStatus)return false;
+      if(fCat!=="All"&&c.cat!==fCat)return false;
+      if(fRisk!=="All"&&c.riskLevel!==fRisk)return false;
+      if(fCarF!=="All"&&c.ca!==fCarF)return false;
+      if(fPolF!=="All"&&c.po!==fPolF)return false;
+      if(fPodF!=="All"&&c.pd!==fPodF)return false;
+      return true;
+    });
+  },[allContainers,fFpStatus,fCat,fRisk,fCarF,fPolF,fPodF]);
+
+  // 30-day forecast data — includes already overdue containers + newly expiring
+  // Day 0 = today, shows cost if no action is taken
+  const forecastChartData=useMemo(()=>{
+    return Array.from({length:31},(_,i)=>{
+      const dayLabel=i===0?"Today":"+"+i+"d";
+      // All containers that are already overdue contribute daily burn from day 0
+      // Containers expiring on day i start contributing from day i onwards
+      const dayCost=forecastContainers.reduce((s,c)=>{
+        // Already expired: contributing from day 0 — accumulates every day
+        const alreadyExpired=c.fpStatus==="Expired";
+        // Expiring on day X (using oDet as days remaining proxy — negative = already expired)
+        const daysRemaining=c.fpStatus==="Expiring Today"?0:c.fpStatus==="Expiring 48h"?1:c.fpStatus==="Green"?5:-1;
+        const startsOnDay=alreadyExpired?0:Math.max(0,daysRemaining);
+        if(i>=startsOnDay){
+          const daysAccruing=i-startsOnDay+1;
+          return s+(c.daily*daysAccruing);
+        }
+        return s;
+      },0);
+      // Containers newly entering paid tier on this day
+      const newlyExpiring=forecastContainers.filter(c=>{
+        if(c.fpStatus==="Expiring Today")return i===0;
+        if(c.fpStatus==="Expiring 48h")return i===1||i===2;
+        return false;
+      }).length;
+      const totalBurn=forecastContainers.reduce((s,c)=>s+c.daily,0);
+      return{day:dayLabel,offset:i,cumulativeCost:Math.round(dayCost),newlyExpiring,dailyBurn:totalBurn};
+    });
+  },[forecastContainers]);
+
   // Charge breakdown scales with forecast date — each day adds proportional accrual to base portfolio
   const chargeData=useMemo(()=>{
     const acc={Origin:{Detention:0,Demurrage:0,Storage:0,"Combined D&D":0},Dest:{Detention:0,Demurrage:0,Storage:0,"Combined D&D":0}};
@@ -781,13 +837,128 @@ function OptimizerPage(){
     {/* CHARGE BREAKDOWN */}
     <ChartBox title="Split By Charge Type & Location" sub="All 4 charge types compared across origin and destination" h={200} insight={(()=>{const o=chargeData[0];const cats=["Detention","Demurrage","Storage","Combined D&D"].map(k=>({n:k,v:o[k]||0}));const top=cats.reduce((a,b)=>b.v>a.v?b:a);return top.n+" at origin ("+fmt(top.v)+") is the dominant charge type. "+(top.n==="Combined D&D"?"Evaluate whether separate rates would be cheaper in Surcharges tab.":"Focus on reducing origin "+top.n.toLowerCase()+" dwell.");})()}><ResponsiveContainer><BarChart data={chargeData}><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"}/><XAxis dataKey="side" stroke={T.dim} fontSize={10}/><YAxis stroke={T.dim} fontSize={10} tickFormatter={v=>fmt(v)}/><Tooltip content={<CTip/>}/><Legend formatter={v=><span style={{fontSize:9,color:T.sub}}>{v}</span>}/><Bar dataKey="Detention" fill={T.amber}/><Bar dataKey="Demurrage" fill={T.purple}/><Bar dataKey="Storage" fill={T.green}/><Bar dataKey="Combined D&D" fill={T.red}/></BarChart></ResponsiveContainer></ChartBox>
 
-    {/* PRIORITIZATION PLANNER */}
+    {/* PRIORITIZATION PLANNER — with toggle */}
     <Card style={{marginBottom:14,background:T.actionBg,border:"1px solid "+T.blue+"15",boxShadow:"0 2px 8px rgba(37,99,235,.06)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div><div style={{fontSize:16,fontWeight:700}}>Container Prioritization Planner</div><div style={{fontSize:9,color:T.sub}}>Filter independently per group, then compare batches to decide where to deploy resources. Cost avoidance based on forecast date above.</div></div>
-        <button onClick={resetAll} style={{padding:"5px 12px",borderRadius:6,border:"1px solid "+T.border,background:"#fff",color:T.sub,fontSize:10,fontWeight:600,cursor:"pointer"}}>Reset All</button>
+        <div>
+          <div style={{fontSize:16,fontWeight:700}}>Container Prioritization Planner</div>
+          <div style={{fontSize:9,color:T.sub}}>
+            {plannerView==="planner"?"Filter independently per group, then compare batches to decide where to deploy resources.":"30-day cost forecast — filter containers to see projected cost accumulation trend."}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {/* Toggle */}
+          <div style={{display:"flex",background:"#fff",border:"1px solid "+T.border,borderRadius:8,overflow:"hidden"}}>
+            {[{id:"forecast",label:"📈 30-Day Forecast"},{id:"planner",label:"⚖ Scenario Planner"}].map(v=>
+              <button key={v.id} onClick={()=>setPlannerView(v.id)} style={{padding:"5px 12px",border:"none",background:plannerView===v.id?T.blue+"15":"transparent",color:plannerView===v.id?T.blue:T.sub,fontSize:10,fontWeight:plannerView===v.id?700:400,cursor:"pointer",borderRight:"1px solid "+T.border,transition:"all .15s"}}>
+                {v.label}
+              </button>
+            )}
+          </div>
+          {plannerView==="planner"&&<button onClick={resetAll} style={{padding:"5px 12px",borderRadius:6,border:"1px solid "+T.border,background:"#fff",color:T.sub,fontSize:10,fontWeight:600,cursor:"pointer"}}>Reset All</button>}
+        </div>
       </div>
 
+      {/* ── 30-DAY FORECAST VIEW ── */}
+      {plannerView==="forecast"&&(()=>{
+        const sortedForecast=[...forecastContainers].sort((a,b)=>fSortDir==="desc"?(b[fSortCol]||0)-(a[fSortCol]||0):(a[fSortCol]||0)-(b[fSortCol]||0));
+        const SortTh=({col,label})=>{const active=fSortCol===col;return<th onClick={()=>{if(fSortCol===col)setFSortDir(d=>d==="desc"?"asc":"desc");else{setFSortCol(col);setFSortDir("desc");}}} style={{padding:"6px 8px",textAlign:"right",color:active?T.blue:T.dim,fontSize:9,fontWeight:600,textTransform:"uppercase",cursor:"pointer",userSelect:"none",whiteSpace:"nowrap"}}>{label}{active?fSortDir==="desc"?" ↓":" ↑":" ↕"}</th>;};
+        return(
+          <div>
+            {/* Filters row */}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14,padding:"10px 12px",background:"#fff",borderRadius:8,border:"1px solid "+T.border+"60"}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.sub,alignSelf:"center",marginRight:4}}>Filters:</div>
+              {[
+                {label:"Free Period",val:fFpStatus,set:setFFpStatus,opts:["Expired","Expiring Today","Expiring 48h","Green"]},
+                {label:"Category",val:fCat,set:setFCat,opts:["Detention","Demurrage","Storage","Combined D&D"]},
+                {label:"Risk",val:fRisk,set:setFRisk,opts:["High","Medium","Low"]},
+                {label:"POL",val:fPolF,set:setFPolF,opts:filterOpts.pols},
+                {label:"POD",val:fPodF,set:setFPodF,opts:filterOpts.pods},
+                {label:"Carrier",val:fCarF,set:setFCarF,opts:filterOpts.carriers},
+              ].map(f=>(
+                <div key={f.label} style={{display:"flex",flexDirection:"column",gap:2}}>
+                  <div style={{fontSize:8,color:T.dim,fontWeight:600,textTransform:"uppercase"}}>{f.label}</div>
+                  <select value={f.val} onChange={e=>f.set(e.target.value)} style={selStyle}>
+                    <option value="All">All</option>
+                    {f.opts.map(o=><option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              ))}
+              <button onClick={()=>{setFFpStatus("All");setFCat("All");setFRisk("All");setFCarF("All");setFPolF("All");setFPodF("All");}} style={{alignSelf:"flex-end",padding:"4px 10px",borderRadius:6,border:"1px solid "+T.border,background:"#fff",color:T.sub,fontSize:9,fontWeight:600,cursor:"pointer"}}>Reset</button>
+            </div>
+
+            {/* Summary KPIs */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+              {[
+                {label:"Containers",val:forecastContainers.length,color:T.text},
+                {label:"Total Exposure Today",val:fmt(forecastContainers.reduce((s,c)=>s+c.todayCost,0)),color:T.red},
+                {label:"Daily Burn Rate",val:fmt(forecastContainers.reduce((s,c)=>s+c.daily,0))+"/d",color:T.amber},
+                {label:"Exposure in 30 Days",val:fmt(forecastContainers.reduce((s,c)=>s+c.daily*30+c.todayCost,0)),color:T.red},
+              ].map(k=>(
+                <div key={k.label} style={{background:"#fff",borderRadius:8,padding:"8px 12px",border:"1px solid "+T.border+"60"}}>
+                  <div style={{fontSize:9,color:T.sub}}>{k.label}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:k.color}}>{k.val}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* 30-day forecast chart */}
+            <ChartBox title="Cumulative Cost Exposure — Next 30 Days" sub="If no containers are cleared, cost accumulates as shown. Each bar = new cost added on that day." h={220} insight={"At current burn rate of "+fmt(forecastContainers.reduce((s,c)=>s+c.daily,0))+"/day, exposure reaches "+fmt(forecastContainers.reduce((s,c)=>s+c.daily*30+c.todayCost,0))+" by day 30."}>
+              <ResponsiveContainer>
+                <ComposedChart data={forecastChartData} barCategoryGap="20%">
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"}/>
+                  <XAxis dataKey="day" stroke={T.dim} fontSize={9} interval={4}/>
+                  <YAxis stroke={T.dim} fontSize={9} tickFormatter={v=>fmt(v)} width={60}/>
+                  <Tooltip formatter={(v,n)=>[fmt(v),n==="cumulativeCost"?"Cumulative Cost":"Daily Burn"]}/>
+                  <Legend formatter={v=><span style={{fontSize:9,color:T.sub}}>{v==="cumulativeCost"?"Cumulative Exposure":v==="dailyBurn"?"Daily Burn":v}</span>}/>
+                  <Bar dataKey="cumulativeCost" fill={T.red+"80"} radius={[3,3,0,0]} name="cumulativeCost"/>
+                  <Line type="monotone" dataKey="dailyBurn" stroke={T.amber} strokeWidth={2} dot={false} name="dailyBurn"/>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </ChartBox>
+
+            {/* Container details table */}
+            <div style={{marginTop:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <div style={{fontSize:13,fontWeight:700}}>Container Details</div>
+                <div style={{fontSize:9,color:T.sub}}>{forecastContainers.length} containers matching filters</div>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 2px",fontSize:10}}>
+                  <thead><tr style={{background:T.card2}}>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:T.dim,fontSize:9,fontWeight:600,textTransform:"uppercase"}}>Container</th>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:T.dim,fontSize:9,fontWeight:600,textTransform:"uppercase"}}>Carrier</th>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:T.dim,fontSize:9,fontWeight:600,textTransform:"uppercase"}}>Lane</th>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:T.dim,fontSize:9,fontWeight:600,textTransform:"uppercase"}}>Category</th>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:T.dim,fontSize:9,fontWeight:600,textTransform:"uppercase"}}>FP Status</th>
+                    <SortTh col="todayCost" label="Avoidable"/>
+                    <SortTh col="daily" label="$/d"/>
+                    <SortTh col="risk" label="Risk"/>
+                  </tr></thead>
+                  <tbody>
+                    {sortedForecast.map((c,i)=>(
+                      <tr key={c.cn} style={{background:i%2===0?"#fff":T.card2+"60"}}>
+                        <td style={{padding:"5px 8px",fontWeight:600,fontFamily:"monospace",fontSize:10}}>{c.cn}</td>
+                        <td style={{padding:"5px 8px",color:T.sub}}>{c.ca}</td>
+                        <td style={{padding:"5px 8px",color:T.sub,fontFamily:"monospace",fontSize:9}}>{c.po}→{c.pd}</td>
+                        <td style={{padding:"5px 8px"}}><span style={{background:catColor(c.cat)+"20",color:catColor(c.cat),borderRadius:4,padding:"2px 6px",fontSize:9,fontWeight:600}}>{c.cat}</span></td>
+                        <td style={{padding:"5px 8px"}}><span style={{color:c.fpStatus==="Expired"?T.red:c.fpStatus==="Green"?T.green:T.amber,fontWeight:600,fontSize:9}}>{c.fpStatus}</span></td>
+                        <td style={{padding:"5px 8px",textAlign:"right",fontWeight:700,color:T.green}}>{fmt(c.todayCost)}<div style={{fontSize:8,color:T.sub}}>+3d:{fmt(c.sav3d)}</div></td>
+                        <td style={{padding:"5px 8px",textAlign:"right",color:T.red,fontWeight:600}}>{"$"+c.daily}</td>
+                        <td style={{padding:"5px 8px",textAlign:"right"}}><SolidBadge color={c.risk>=75?T.red:c.risk>=50?T.amber:T.green}>{c.risk>=75?"High":c.risk>=50?"Medium":"Low"}</SolidBadge></td>
+                      </tr>
+                    ))}
+                    {sortedForecast.length===0&&<tr><td colSpan={8} style={{padding:20,textAlign:"center",color:T.dim,fontSize:11}}>No containers match the current filters.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── SCENARIO PLANNER VIEW ── */}
+      {plannerView==="planner"&&<div>
       {/* GROUP A vs GROUP B side-by-side */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 60px 1fr",gap:8}}>
         {/* GROUP A */}
@@ -892,7 +1063,8 @@ function OptimizerPage(){
         <div style={{fontSize:9,color:T.sub}}>{"Acting on "+(gAToday>gBToday?"Group A":"Group B")+"'s top containers avoids "+fmt(Math.max(gAToday,gBToday))+" this period at "+fmt(Math.max(gAToday>gBToday?groupA.active.reduce((s,c)=>s+c.daily,0):groupB.active.reduce((s,c)=>s+c.daily,0),0))+"/day burn."}</div></>}
       </div>}
                   {(groupA.active.length>0||groupB.active.length>0)&&<div style={{marginTop:10}}><ChartBox title="Group Comparison" sub="Today (blue) vs +3d (green) vs +7d (red)" h={140}><ResponsiveContainer><BarChart data={[{name:"Group A",Today:gAToday,"+3d":gA3d,"+7d":gA7d},{name:"Group B",Today:gBToday,"+3d":gB3d,"+7d":gB7d}]}><CartesianGrid strokeDasharray="3 3" stroke={T.border+"60"}/><XAxis dataKey="name" stroke={T.dim} fontSize={10}/><YAxis stroke={T.dim} fontSize={10} tickFormatter={v=>fmt(v)}/><Tooltip formatter={v=>fmt(v)}/><Bar dataKey="Today" fill={T.blue} radius={[3,3,0,0]}/><Bar dataKey="+3d" fill={T.green} radius={[3,3,0,0]}/><Bar dataKey="+7d" fill={T.red} radius={[3,3,0,0]}/><Legend formatter={v=><span style={{fontSize:9,color:T.sub}}>{v}</span>}/></BarChart></ResponsiveContainer></ChartBox></div>}
-    </Card>
+      </div>}{/* end plannerView==="planner" */}
+    </Card>{/* end outer planner Card */}
 
     <Card style={{marginTop:14}}>
       <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Actionable Observations</div>
@@ -901,6 +1073,7 @@ function OptimizerPage(){
         {c:T.red,t:"Top 3 containers burn "+fmt(top3burn)+"/day combined",b:"These have been in origin detention for "+Math.round(maxODet)+"+ days, deep in higher tier rates.",a:"Clearing within 3 days avoids "+fmt(top3sav)+" in additional charges."}]})().map((ins,i)=><div key={i} style={{background:T.card2,borderRadius:8,padding:10,marginBottom:6,borderLeft:"3px solid "+ins.c}}><div style={{fontSize:11,fontWeight:600,marginBottom:2}}>{ins.t}</div><div style={{fontSize:11,color:T.sub,lineHeight:1.4}}>{"Because: "+ins.b}</div><div style={{fontSize:11,color:ins.c,fontWeight:600}}>{"Action: "+ins.a}</div></div>)}
     </Card>
   </div>);
+
 }
 
 // ═══ MODULE 5: HISTORICAL ═══
