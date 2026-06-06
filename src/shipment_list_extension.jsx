@@ -31,6 +31,181 @@ const STORAGE_KEY = 'sl_ext_config_v2';
 function loadConfig(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); }catch{ return {}; } }
 function saveConfig(cfg){ localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); }
 
+// ── CUSTOM PALETTE EDITOR ────────────────────────────────────────────────────
+function CustomPaletteEditor({customPalettes, onChange}){
+  const[palettes,setPalettes]=useState(()=>customPalettes||{});
+  const[editName,setEditName]=useState(null); // name of palette being edited
+  const[newName,setNewName]=useState('');
+  const[newNameErr,setNewNameErr]=useState('');
+  const[addingColor,setAddingColor]=useState('#4E79A7');
+
+  function persist(updated){
+    setPalettes(updated);
+    onChange(updated);
+  }
+
+  function createPalette(){
+    const n=newName.trim();
+    if(!n){ setNewNameErr('Name required'); return; }
+    if(PALETTES[n]||palettes[n]){ setNewNameErr('Name already used'); return; }
+    const updated={...palettes,[n]:[]};
+    persist(updated);
+    setEditName(n);
+    setNewName('');
+    setNewNameErr('');
+  }
+
+  function deletePalette(name){
+    const updated={...palettes};
+    delete updated[name];
+    persist(updated);
+    if(editName===name) setEditName(null);
+  }
+
+  function addColor(name){
+    const updated={...palettes,[name]:[...(palettes[name]||[]),addingColor]};
+    persist(updated);
+  }
+
+  function removeColor(name,idx){
+    const updated={...palettes,[name]:palettes[name].filter((_,i)=>i!==idx)};
+    persist(updated);
+  }
+
+  function updateColor(name,idx,hex){
+    const arr=[...palettes[name]];
+    arr[idx]=hex;
+    persist({...palettes,[name]:arr});
+  }
+
+  const names=Object.keys(palettes);
+
+  return(
+    <div>
+      <p style={{fontSize:12,color:T.sub,marginBottom:18,lineHeight:1.65}}>
+        Build your own color palettes. They appear alongside the built-in Tableau palettes in the Color Rules tab.
+      </p>
+
+      {/* Create new */}
+      <div style={{marginBottom:20}}>
+        <label style={{display:'block',fontSize:11,fontWeight:700,color:T.sub,
+          textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:6}}>New Palette Name</label>
+        <div style={{display:'flex',gap:8}}>
+          <div style={{flex:1}}>
+            <input value={newName} onChange={e=>{setNewName(e.target.value);setNewNameErr('');}}
+              onKeyDown={e=>e.key==='Enter'&&createPalette()}
+              placeholder="e.g. My Milestones"
+              style={{width:'100%',padding:'9px 12px',border:'1px solid '+(newNameErr?T.red:T.border),
+                borderRadius:8,fontSize:13,outline:'none',color:T.text,background:T.white}}/>
+            {newNameErr&&<div style={{fontSize:11,color:T.red,marginTop:4}}>{newNameErr}</div>}
+          </div>
+          <button onClick={createPalette}
+            style={{padding:'9px 18px',borderRadius:8,border:'none',background:T.blue,
+              color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+            + Create
+          </button>
+        </div>
+      </div>
+
+      {/* Palette list */}
+      {names.length===0&&(
+        <div style={{textAlign:'center',padding:'32px 0',color:T.dim,fontSize:13,
+          border:'1px dashed '+T.border,borderRadius:10}}>
+          No custom palettes yet. Create one above.
+        </div>
+      )}
+
+      {names.map(name=>{
+        const colors=palettes[name]||[];
+        const isOpen=editName===name;
+        return(
+          <div key={name} style={{border:'1px solid '+T.border,borderRadius:10,
+            marginBottom:10,overflow:'hidden'}}>
+            {/* Header row */}
+            <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,
+              background:isOpen?T.blueBg:'#FAFAFA',cursor:'pointer',userSelect:'none'}}
+              onClick={()=>setEditName(isOpen?null:name)}>
+              <span style={{fontSize:13,fontWeight:600,color:T.text,flex:1}}>{name}</span>
+              {/* Color preview dots */}
+              <div style={{display:'flex',gap:3,flexShrink:0}}>
+                {colors.slice(0,10).map((c,i)=>(
+                  <div key={i} style={{width:14,height:14,borderRadius:3,background:c,
+                    border:'1px solid rgba(0,0,0,.1)',flexShrink:0}}/>
+                ))}
+                {colors.length===0&&<span style={{fontSize:11,color:T.dim,fontStyle:'italic'}}>empty</span>}
+              </div>
+              <span style={{fontSize:11,color:T.sub,marginLeft:4,flexShrink:0}}>{colors.length} color{colors.length!==1?'s':''}</span>
+              <button onClick={e=>{e.stopPropagation();deletePalette(name);}}
+                title="Delete palette"
+                style={{background:'#FEF2F2',border:'1px solid #FCA5A5',borderRadius:6,
+                  padding:'3px 8px',color:T.red,fontSize:11,cursor:'pointer',flexShrink:0}}>
+                Delete
+              </button>
+              <span style={{color:T.sub,fontSize:12,flexShrink:0}}>{isOpen?'▲':'▼'}</span>
+            </div>
+
+            {/* Expanded editor */}
+            {isOpen&&(
+              <div style={{padding:'16px',borderTop:'1px solid '+T.border}}>
+                {/* Existing colors */}
+                {colors.length>0&&(
+                  <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:16}}>
+                    {colors.map((c,i)=>(
+                      <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                        <div style={{position:'relative'}}>
+                          <input type="color" value={c}
+                            onChange={e=>updateColor(name,i,e.target.value)}
+                            title={c}
+                            style={{width:40,height:40,padding:3,border:'1px solid '+T.border,
+                              borderRadius:8,cursor:'pointer',background:'none'}}/>
+                        </div>
+                        <button onClick={()=>removeColor(name,i)}
+                          style={{background:'none',border:'none',cursor:'pointer',
+                            color:T.dim,fontSize:11,padding:0,lineHeight:1}}
+                          title="Remove">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add color row */}
+                <div style={{display:'flex',gap:8,alignItems:'center',
+                  padding:'10px 12px',background:T.bg,borderRadius:8}}>
+                  <input type="color" value={addingColor}
+                    onChange={e=>setAddingColor(e.target.value)}
+                    style={{width:40,height:36,padding:2,border:'1px solid '+T.border,
+                      borderRadius:6,cursor:'pointer',background:'none',flexShrink:0}}/>
+                  <span style={{fontSize:12,color:T.sub,flex:1,fontFamily:'monospace'}}>{addingColor}</span>
+                  <button onClick={()=>addColor(name)}
+                    style={{padding:'7px 14px',borderRadius:7,border:'none',background:T.blue,
+                      color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                    + Add Color
+                  </button>
+                </div>
+
+                {/* Quick-add from built-in palette */}
+                <div style={{marginTop:12}}>
+                  <div style={{fontSize:11,color:T.sub,marginBottom:6}}>Quick-add from Tableau palette:</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                    {PALETTES['Tableau 10'].map((c,i)=>(
+                      <div key={i} title={'Add '+c}
+                        onClick={()=>{const upd={...palettes,[name]:[...(palettes[name]||[]),c]};persist(upd);}}
+                        style={{width:22,height:22,borderRadius:4,background:c,cursor:'pointer',
+                          border:'1px solid rgba(0,0,0,.1)',transition:'transform .1s'}}
+                        onMouseEnter={e=>e.target.style.transform='scale(1.3)'}
+                        onMouseLeave={e=>e.target.style.transform='scale(1)'}/>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── MOCK DATA (dev fallback) ─────────────────────────────────────────────────
 const MOCK_COLS = [
   {field:'shipmentId',  label:'SHIPMENT ID'},
@@ -128,6 +303,83 @@ function CellValue({value, fieldName, colorRules}){
   return <span style={{fontSize:13,color:T.text}}>{v}</span>;
 }
 
+// ── PREFERENCES.TPS IMPORTER ────────────────────────────────────────────────
+function parseTps(xml){
+  // Parse <color-palette name="..." type="..."><color>#hex</color>...</color-palette>
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+  const result = {};
+  const palEls = doc.querySelectorAll('color-palette');
+  palEls.forEach(pal => {
+    const name = pal.getAttribute('name');
+    if (!name) return;
+    const colors = Array.from(pal.querySelectorAll('color'))
+      .map(c => c.textContent.trim())
+      .filter(c => /^#[0-9A-Fa-f]{6}$/.test(c));
+    if (colors.length > 0) result[name] = colors;
+  });
+  return result;
+}
+
+function TpsImporter({onImport}){
+  const[text,setText]=useState('');
+  const[status,setStatus]=useState(null); // {ok, msg}
+
+  function handleFile(e){
+    const file=e.target.files?.[0];
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>setText(ev.target.result||'');
+    reader.readAsText(file);
+  }
+
+  function doImport(){
+    if(!text.trim()){ setStatus({ok:false,msg:'Paste or upload a Preferences.tps file first.'}); return; }
+    try{
+      const parsed=parseTps(text);
+      const n=Object.keys(parsed).length;
+      if(n===0){ setStatus({ok:false,msg:'No <color-palette> elements found. Check the XML.'}); return; }
+      onImport(parsed);
+      setStatus({ok:true,msg:`Imported ${n} palette${n!==1?'s':''}. They are now available in Color Rules.`});
+      setText('');
+    }catch(e){ setStatus({ok:false,msg:'Parse error: '+e.message}); }
+  }
+
+  return(
+    <div>
+      {/* File upload */}
+      <label style={{display:'inline-flex',alignItems:'center',gap:7,padding:'8px 14px',
+        borderRadius:8,border:'1px solid '+T.border,background:T.white,cursor:'pointer',
+        fontSize:12,fontWeight:500,color:T.text,marginBottom:8}}>
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M4 16v1a2 2 0 002 2h8a2 2 0 002-2v-1M8 12l4-4 4 4M12 8v8"/>
+        </svg>
+        Choose .tps file
+        <input type="file" accept=".tps,.xml" onChange={handleFile} style={{display:'none'}}/>
+      </label>
+      <div style={{fontSize:11,color:T.sub,marginBottom:8}}>— or paste XML below —</div>
+      <textarea value={text} onChange={e=>setText(e.target.value)}
+        placeholder={'<?xml version=\'1.0\'?>\n<workbook>\n  <preferences>\n    <color-palette name="My Palette" type="regular">\n      <color>#4E79A7</color>\n      ...\n    </color-palette>\n  </preferences>\n</workbook>'}
+        rows={5}
+        style={{width:'100%',padding:'9px 12px',border:'1px solid '+T.border,borderRadius:8,
+          fontSize:11,fontFamily:'monospace',outline:'none',resize:'vertical',
+          color:T.text,background:T.white,marginBottom:8,boxSizing:'border-box'}}/>
+      <button onClick={doImport}
+        style={{padding:'8px 18px',borderRadius:8,border:'none',background:T.blue,
+          color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>
+        Import Palettes
+      </button>
+      {status&&(
+        <div style={{marginTop:8,fontSize:12,color:status.ok?'#065F46':T.red,
+          background:status.ok?'#D1FAE5':'#FEF2F2',padding:'8px 12px',borderRadius:7,
+          border:'1px solid '+(status.ok?'#6EE7B7':'#FCA5A5')}}>
+          {status.ok?'✓ ':''}{status.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── COLUMN PICKER DROPDOWN ───────────────────────────────────────────────────
 function ColPicker({allCols,visible,onToggle,onClose}){
   const ref=useRef(null);
@@ -160,8 +412,13 @@ function ColPicker({allCols,visible,onToggle,onClose}){
 function SettingsModal({allCols,allRows,config,onSave,onClose}){
   const[tab,setTab]=useState('colors');
   const[colorRules,setColorRules]=useState(()=>config.colorRules||{});
+  const[customPalettes,setCustomPalettes]=useState(()=>config.customPalettes||{});
   const[selField,setSelField]=useState(allCols[0]?.field||'');
   const[selPalette,setSelPalette]=useState('Tableau 10');
+
+  // Merged palette list: built-in + custom
+  const allPalettes=useMemo(()=>({...PALETTES,...customPalettes}),[customPalettes]);
+  const allPaletteNames=useMemo(()=>Object.keys(allPalettes),[allPalettes]);
 
   const uniqueVals=useMemo(()=>{
     if(!selField) return [];
@@ -171,7 +428,8 @@ function SettingsModal({allCols,allRows,config,onSave,onClose}){
   },[selField,allRows]);
 
   function autoAssign(){
-    const pal=PALETTES[selPalette]||PALETTES['Tableau 10'];
+    const pal=allPalettes[selPalette]||PALETTES['Tableau 10'];
+    if(!pal.length) return;
     const updated={...(colorRules[selField]||{})};
     uniqueVals.forEach((v,i)=>{updated[v]={bg:pal[i%pal.length],fg:isLightColor(pal[i%pal.length])?'#1F2937':'#FFFFFF'};});
     setColorRules(p=>({...p,[selField]:updated}));
@@ -207,6 +465,7 @@ function SettingsModal({allCols,allRows,config,onSave,onClose}){
           </div>
           <div style={{display:'flex',gap:0}}>
             <button style={TAB_STYLE('colors')} onClick={()=>setTab('colors')}>🎨 Color Rules</button>
+            <button style={TAB_STYLE('palettes')} onClick={()=>setTab('palettes')}>🖌 Custom Palettes</button>
             <button style={TAB_STYLE('about')} onClick={()=>setTab('about')}>ℹ About</button>
           </div>
         </div>
@@ -238,7 +497,16 @@ function SettingsModal({allCols,allRows,config,onSave,onClose}){
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
                   <select value={selPalette} onChange={e=>setSelPalette(e.target.value)}
                     style={{flex:1,padding:'9px 12px',border:'1px solid '+T.border,borderRadius:8,fontSize:13,background:T.white,cursor:'pointer'}}>
-                    {PALETTE_NAMES.map(p=><option key={p}>{p}</option>)}
+                    <optgroup label="Tableau Built-in">
+                      {PALETTE_NAMES.map(p=><option key={p}>{p}</option>)}
+                    </optgroup>
+                    {Object.keys(customPalettes).length>0&&(
+                      <optgroup label="Custom">
+                        {Object.keys(customPalettes).map(p=>(
+                          <option key={p}>{p}{customPalettes[p].length===0?' (empty)':''}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                   <button onClick={autoAssign}
                     style={{padding:'9px 16px',borderRadius:8,border:'none',background:T.blue,
@@ -258,7 +526,7 @@ function SettingsModal({allCols,allRows,config,onSave,onClose}){
               {/* Palette color preview dots */}
               <div style={{display:'flex',gap:5,marginBottom:20,flexWrap:'wrap',padding:'10px',
                 background:T.bg,borderRadius:8}}>
-                {(PALETTES[selPalette]||[]).map((c,i)=>(
+                {(allPalettes[selPalette]||[]).map((c,i)=>(
                   <div key={i} title={c} style={{width:24,height:24,borderRadius:5,background:c,
                     border:'1px solid rgba(0,0,0,.08)',cursor:'default',
                     transition:'transform .1s',flexShrink:0}}
@@ -327,6 +595,26 @@ function SettingsModal({allCols,allRows,config,onSave,onClose}){
             </div>
           )}
 
+          {tab==='palettes'&&(
+            <div>
+              {/* Import from Preferences.tps */}
+              <div style={{background:T.blueBg,border:'1px solid '+T.blueMid,borderRadius:10,
+                padding:'14px 16px',marginBottom:20}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.blue,marginBottom:6}}>
+                  📂 Import from Preferences.tps
+                </div>
+                <p style={{fontSize:12,color:T.sub,marginBottom:10,lineHeight:1.6}}>
+                  Paste your <strong>Preferences.tps</strong> XML below (found at <code style={{fontSize:11,background:'#DBEAFE',padding:'1px 4px',borderRadius:3}}>~/Documents/My Tableau Repository/Preferences.tps</code>) to import all custom palettes at once.
+                </p>
+                <TpsImporter onImport={imported=>{
+                  const merged={...customPalettes,...imported};
+                  setCustomPalettes(merged);
+                }}/>
+              </div>
+              <CustomPaletteEditor customPalettes={customPalettes} onChange={setCustomPalettes}/>
+            </div>
+          )}
+
           {tab==='about'&&(
             <div style={{fontSize:13,color:T.sub,lineHeight:1.7}}>
               <p style={{marginBottom:12}}><strong style={{color:T.text}}>Shipment List Extension</strong> reads live data from your Tableau worksheet datasource via the Extensions API.</p>
@@ -349,7 +637,7 @@ function SettingsModal({allCols,allRows,config,onSave,onClose}){
             background:T.white,fontSize:13,fontWeight:500,cursor:'pointer',color:T.text}}>
             Cancel
           </button>
-          <button onClick={()=>onSave({colorRules})}
+          <button onClick={()=>onSave({colorRules,customPalettes})}
             style={{padding:'10px 24px',borderRadius:8,border:'none',background:T.blue,
               color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>
             Save & Apply
@@ -477,8 +765,8 @@ export default function ShipmentListExtension(){
     saveConfig(saved); setConfig(saved);
   };
 
-  function handleSaveSettings({colorRules}){
-    const next={...config,colorRules,visibleCols};
+  function handleSaveSettings({colorRules,customPalettes}){
+    const next={...config,colorRules,customPalettes,visibleCols};
     saveConfig(next); setConfig(next); setShowSettings(false);
   }
 
