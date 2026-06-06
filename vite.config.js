@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         shipment_list: resolve(__dirname, 'shipment_list.html'),
+        table_extension: resolve(__dirname, 'table_extension.html'),
       },
     },
   },

@@ -692,7 +692,7 @@ function SettingsModal({allCols,allRows,config,onSave,onClose}){
 }
 
 // ── MAIN EXTENSION ───────────────────────────────────────────────────────────
-export default function ShipmentListExtension(){
+export default function TableExtension(){
   const[allRows,setAllRows]           = useState([]);
   const[allCols,setAllCols]           = useState([]);
   const[visibleCols,setVisibleCols]   = useState([]);
