@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest manifest-version="0.1" xmlns="http://www.tableau.com/xml/extension_manifest">
+  <dashboard-extension id="com.logward.dnd.shipmentlist" extension-version="1.0.0">
+    <default-locale>en_US</default-locale>
+    <name resource-id="name">Shipment List</name>
+    <description>Live shipment table with search, sort, configurable Tableau-style badge colors, and CSV export.</description>
+    <author name="Logward" email="pranay.nimje@logward.com" organization="Logward" website="https://logward.com"/>
+    <min-api-version>1.4</min-api-version>
+    <source-location>
+      <url>http://localhost:5173/shipment_list.html</url>
+    </source-location>
+    <icon>iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAFklEQVQ4jWNgGAWjYBSMglEwCqgHAAQQAAGnRHxMAAAAAElFTkSuQmCC</icon>
+    <permissions>
+      <permission>full data</permission>
+    </permissions>
+  </dashboard-extension>
+</manifest>
