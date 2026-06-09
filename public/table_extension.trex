@@ -5,7 +5,7 @@
     <name resource-id="name">Table Extension</name>
     <description>Universal table extension — reads any Tableau worksheet datasource, supports configurable badge colors, shapes, custom palettes, Preferences.tps import, search, sort, and CSV export.</description>
     <author name="Logward" email="pranay.nimje@logward.com" organization="Logward" website="https://logward.com"/>
-    <min-api-version>1.4</min-api-version>
+    <min-api-version>1.7</min-api-version>
     <source-location>
       <url>http://localhost:5173/table_extension.html</url>
     </source-location>
